@@ -5,7 +5,7 @@
   <div class="cta__bg" aria-hidden="true"></div>
 
   <div class="cta__inner container container--padded">
-    <form class="cta__card" method="post" action="/thank-you" data-reveal>
+    <form class="cta__card" method="post" action="/api/apply" enctype="multipart/form-data" data-reveal>
       {/* Hidden attribution fields — auto-filled from URL params / Meta cookies for offline conversion tracking */}
       <input type="hidden" name="fbclid" />
       <input type="hidden" name="fbc" />
@@ -78,6 +78,7 @@
             <span class="cta__checkbox-text">Давам съгласието си съобразно новите правила за <a href="#">защита на личните данни</a></span>
           </label>
           <button type="submit" class="btn-primary cta__submit">Кандидатствай сега</button>
+          <p class="cta__status" role="alert" hidden></p>
         </div>
       </div>
     </form>
@@ -145,13 +146,46 @@
       form.addEventListener("submit", fill, { capture: true })
     );
 
-    // Visual flow: once the required fields validate, send the applicant to the
-    // thank-you page. (Form data isn't sent to a backend yet — that comes with
-    // real submission; until then this just routes the user.)
+    // Submit: send the form (files + fields) to /api/apply, which stores the
+    // files in R2 and forwards the lead to the CRM. On success → thank-you page;
+    // otherwise show the returned message. Required fields validate first.
     const ctaForm = document.querySelector<HTMLFormElement>(".cta__card");
-    ctaForm?.addEventListener("submit", (e) => {
+    const status = ctaForm?.querySelector<HTMLElement>(".cta__status");
+    const submitBtn = ctaForm?.querySelector<HTMLButtonElement>('[type="submit"]');
+
+    const showError = (msg: string) => {
+      if (!status) return;
+      status.textContent = msg;
+      status.hidden = false;
+    };
+
+    ctaForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      window.location.href = "/thank-you";
+      if (status) status.hidden = true;
+      fill();
+      const original = submitBtn?.textContent || "";
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Изпращане…";
+      }
+      try {
+        const res = await fetch("/api/apply", {
+          method: "POST",
+          body: new FormData(ctaForm),
+        });
+        if (res.status === 201) {
+          window.location.href = "/thank-you";
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        showError(data.message || "Възникна грешка. Опитайте отново.");
+      } catch {
+        showError("Неуспешна връзка със сървъра.");
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = original;
+      }
     });
   })();
 </script>
@@ -382,6 +416,17 @@
     width: 100%;
     padding-inline: 2.25em; /* 36px */
     box-shadow: 0px 5px 15px rgba(169, 8, 49, 0.4);
+  }
+  .cta__status {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 0.875em; /* 14px */
+    line-height: 1.4;
+    color: var(--color-accent);
+    text-align: center;
+  }
+  .cta__status[hidden] {
+    display: none;
   }
 
   @media (max-width: 991px) {
