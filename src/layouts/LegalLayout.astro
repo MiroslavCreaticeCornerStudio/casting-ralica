@@ -1,0 +1,141 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+import Navbar from "../components/Navbar.astro";
+import Footer from "../components/Footer.astro";
+
+export interface Props {
+  title: string;
+  description?: string;
+  heading: string;
+}
+const { title, description = "", heading } = Astro.props;
+---
+
+<BaseLayout title={title} description={description}>
+  <main id="main" tabindex="-1">
+    <section class="legal-hero">
+      <div class="legal-hero__bg" aria-hidden="true"></div>
+      <div class="legal-hero__overlay" aria-hidden="true"></div>
+      <Navbar />
+      <div class="legal-hero__inner container container--padded">
+        <h1 class="legal-hero__title">{heading}</h1>
+      </div>
+    </section>
+
+    <section class="legal">
+      <div class="legal__inner container container--padded">
+        <slot />
+      </div>
+    </section>
+  </main>
+  <Footer />
+</BaseLayout>
+
+<style>
+  /* Dark header band so the (white) navbar stays legible above the content */
+  .legal-hero {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background-color: #1e1e1e;
+  }
+  .legal-hero__bg {
+    position: absolute;
+    inset: 0;
+    background-image: url("/assets/images/cta-background.webp");
+    background-size: cover;
+    background-position: center;
+    z-index: 0;
+  }
+  .legal-hero__overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .legal-hero__inner {
+    position: relative;
+    z-index: 2;
+    padding-block: 9em 3em; /* top clears the absolute navbar */
+  }
+  .legal-hero__title {
+    font-family: var(--font-heading);
+    font-size: 3em; /* 48px */
+    font-weight: 500;
+    line-height: 1.15;
+    color: var(--color-text-white);
+  }
+
+  /* White content area */
+  .legal {
+    width: 100%;
+    background-color: var(--color-bg-white);
+  }
+  .legal__inner {
+    max-width: 52em; /* readable measure */
+    padding-block: 3.5em 5em;
+  }
+
+  /* Prose — content comes through the slot, so style it globally within scope */
+  .legal__inner :global(h2) {
+    font-family: var(--font-heading);
+    font-size: 1.5em; /* 24px */
+    font-weight: 500;
+    line-height: 1.25;
+    color: var(--color-text-primary);
+    margin-top: 2em;
+    margin-bottom: 0.6em;
+  }
+  .legal__inner :global(h2:first-child) {
+    margin-top: 0;
+  }
+  .legal__inner :global(p) {
+    font-family: var(--font-body);
+    font-size: 1em; /* 16px */
+    font-weight: 400;
+    line-height: 1.65;
+    color: var(--color-text-primary);
+    margin-bottom: 1em;
+  }
+  .legal__inner :global(.legal-lead) {
+    font-weight: 500;
+  }
+  .legal__inner :global(ul),
+  .legal__inner :global(ol) {
+    margin: 0 0 1.25em;
+    padding-left: 1.4em;
+  }
+  .legal__inner :global(ul) {
+    list-style: disc;
+  }
+  .legal__inner :global(ol) {
+    list-style: decimal;
+  }
+  .legal__inner :global(li) {
+    font-family: var(--font-body);
+    font-size: 1em;
+    line-height: 1.6;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5em;
+  }
+  .legal__inner :global(ul ul) {
+    margin: 0.5em 0 0.5em;
+    list-style: circle;
+  }
+  .legal__inner :global(a) {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  @media (max-width: 767px) {
+    .legal-hero__inner {
+      padding-block: 7.5em 2.5em;
+    }
+    .legal-hero__title {
+      font-size: 2.1em;
+    }
+    .legal__inner {
+      padding-block: 2.5em 3.5em;
+    }
+  }
+</style>
