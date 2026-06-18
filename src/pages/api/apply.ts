@@ -1,12 +1,12 @@
 import type { APIRoute } from "astro";
-import { env } from "cloudflare:workers";
+import { put } from "@vercel/blob";
 
-// This route runs on the Worker (not prerendered).
+// This route runs on-demand as a Vercel serverless function (not prerendered).
 export const prerender = false;
 
 const SKYGURU_ENDPOINT = "https://test-hb.skyguru.ai/api/v1/public/leads";
 const FORM_NAME = "Casting Ralica";
-const MAX_FILE = 100 * 1024 * 1024; // 100 MB (Worker request-body ceiling)
+const MAX_FILE = 100 * 1024 * 1024; // 100 MB
 
 // Page file inputs → label shown on the lead in the CRM (as an `extra` entry).
 const FILE_FIELDS = [
@@ -33,9 +33,9 @@ const json = (body: unknown, status: number) =>
 const sanitize = (name: string) =>
   (name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100) || "file";
 
-export const POST: APIRoute = async ({ request, url }) => {
-  const bucket: any = (env as any).UPLOADS;
-  if (!bucket) {
+export const POST: APIRoute = async ({ request }) => {
+  // Vercel injects BLOB_READ_WRITE_TOKEN once a Blob store is linked to the project.
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return json({ message: "Хранилището за файлове не е конфигурирано." }, 500);
   }
 
@@ -53,7 +53,8 @@ export const POST: APIRoute = async ({ request, url }) => {
   if (!form.get("consent"))
     return json({ message: "Необходимо е съгласие за обработка на личните данни." }, 422);
 
-  // Upload each provided file to R2 under a random key; collect public links.
+  // Upload each provided file to Vercel Blob under a random key; collect links.
+  // The random UUID prefix makes the public URL unguessable.
   const extra: { name: string; value: string }[] = [];
   for (const { field, label } of FILE_FIELDS) {
     const file = form.get(field);
@@ -62,10 +63,12 @@ export const POST: APIRoute = async ({ request, url }) => {
         return json({ message: `${label}: файлът е твърде голям (макс. 100 MB).` }, 422);
       }
       const key = `${crypto.randomUUID()}/${sanitize(file.name)}`;
-      await bucket.put(key, file.stream(), {
-        httpMetadata: { contentType: file.type || "application/octet-stream" },
+      const blob = await put(key, file, {
+        access: "public",
+        addRandomSuffix: false,
+        contentType: file.type || "application/octet-stream",
       });
-      extra.push({ name: label, value: `${url.origin}/files/${key}` });
+      extra.push({ name: label, value: blob.url });
     }
   }
 
