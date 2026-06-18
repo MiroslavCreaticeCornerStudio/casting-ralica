@@ -33,9 +33,20 @@ const json = (body: unknown, status: number) =>
 const sanitize = (name: string) =>
   (name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100) || "file";
 
+// Vercel injects the Blob token when a store is linked. The default name is
+// BLOB_READ_WRITE_TOKEN, but a named store can produce a prefixed variant
+// (e.g. casting_ralica_blob_READ_WRITE_TOKEN) — accept either.
+const blobToken = (): string | undefined => {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN;
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v && /BLOB_READ_WRITE_TOKEN$/.test(k)) return v;
+  }
+  return undefined;
+};
+
 export const POST: APIRoute = async ({ request }) => {
-  // Vercel injects BLOB_READ_WRITE_TOKEN once a Blob store is linked to the project.
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const token = blobToken();
+  if (!token) {
     return json({ message: "Хранилището за файлове не е конфигурирано." }, 500);
   }
 
@@ -65,6 +76,7 @@ export const POST: APIRoute = async ({ request }) => {
       const key = `${crypto.randomUUID()}/${sanitize(file.name)}`;
       const blob = await put(key, file, {
         access: "public",
+        token,
         addRandomSuffix: false,
         contentType: file.type || "application/octet-stream",
       });
