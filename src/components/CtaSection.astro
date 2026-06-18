@@ -50,21 +50,21 @@
             <div class="cta__attach">
               <span class="cta__label">CV*</span>
               <label class="cta__attach-btn">
-                Прикачи файл
+                <span class="cta__attach-label">Прикачи файл</span>
                 <input type="file" name="cv" accept=".pdf,.doc,.docx" required />
               </label>
             </div>
             <div class="cta__attach">
               <span class="cta__label">Мотивационно писмо*</span>
               <label class="cta__attach-btn">
-                Прикачи файл
+                <span class="cta__attach-label">Прикачи файл</span>
                 <input type="file" name="cover-letter" accept=".pdf,.doc,.docx" required />
               </label>
             </div>
             <div class="cta__attach">
               <span class="cta__label">Видео*</span>
               <label class="cta__attach-btn">
-                Прикачи видео
+                <span class="cta__attach-label">Прикачи видео</span>
                 <input type="file" name="video" accept="video/*" required />
               </label>
             </div>
@@ -158,6 +158,21 @@
       status.textContent = msg;
       status.hidden = false;
     };
+
+    // File-upload feedback — show the chosen file name + a check on the pill.
+    ctaForm?.querySelectorAll<HTMLLabelElement>(".cta__attach-btn").forEach((btn) => {
+      const input = btn.querySelector<HTMLInputElement>('input[type="file"]');
+      const label = btn.querySelector<HTMLElement>(".cta__attach-label");
+      if (!input || !label) return;
+      const def = label.textContent || "";
+      input.addEventListener("change", () => {
+        const name = input.files && input.files[0] ? input.files[0].name : "";
+        label.textContent = name || def;
+        btn.classList.toggle("is-filled", !!name);
+        if (name) btn.title = name;
+        else btn.removeAttribute("title");
+      });
+    });
 
     ctaForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -358,6 +373,8 @@
   .cta__attach-btn {
     display: inline-flex;
     align-items: center;
+    gap: 0.4em;
+    max-width: 100%;
     padding: 0.375em 0.75em; /* 6px 12px */
     border-radius: 1.75em; /* 28px */
     background-color: var(--color-accent);
@@ -366,9 +383,25 @@
     font-size: 0.875em; /* 14px */
     line-height: 1;
     cursor: pointer;
+    transition: background-color 0.2s ease;
   }
   .cta__attach-btn input[type="file"] {
     display: none;
+  }
+  .cta__attach-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 14em;
+  }
+  /* Selected state — green pill with a check so it's clear a file is attached */
+  .cta__attach-btn.is-filled {
+    background-color: #2f9e44;
+  }
+  .cta__attach-btn.is-filled::before {
+    content: "✓";
+    font-weight: 700;
+    line-height: 1;
   }
 
   .cta__consent {
