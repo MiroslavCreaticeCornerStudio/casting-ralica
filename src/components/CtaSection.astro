@@ -86,6 +86,8 @@
 </section>
 
 <script>
+  import { upload } from "@vercel/blob/client";
+
   // Offline conversion tracking: capture the Facebook click id + UTM params on
   // landing, persist them in localStorage, and inject them into the form's
   // hidden fields so they travel with the lead to your CRM / Meta CAPI.
@@ -146,9 +148,9 @@
       form.addEventListener("submit", fill, { capture: true })
     );
 
-    // Submit: send the form (files + fields) to /api/apply, which stores the
-    // files in R2 and forwards the lead to the CRM. On success → thank-you page;
-    // otherwise show the returned message. Required fields validate first.
+    // Submit: upload files directly to Vercel Blob, then send the fields + the
+    // resulting file URLs to /api/apply, which forwards the lead to the CRM. On
+    // success → thank-you page; otherwise show the returned message.
     const ctaForm = document.querySelector<HTMLFormElement>(".cta__card");
     const status = ctaForm?.querySelector<HTMLElement>(".cta__status");
     const submitBtn = ctaForm?.querySelector<HTMLButtonElement>('[type="submit"]');
@@ -184,9 +186,33 @@
         submitBtn.textContent = "Изпращане…";
       }
       try {
+        // 1. Upload each file straight to Vercel Blob from the browser. This
+        //    bypasses the serverless request-body limit (~4.5MB), so large
+        //    casting videos upload fine — we only get small URLs back.
+        const fileLinks: Record<string, string> = {};
+        for (const name of ["cv", "cover-letter", "video"]) {
+          const input = ctaForm.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+          const file = input?.files?.[0];
+          if (!file) continue;
+          const safe = (file.name || "file").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100);
+          const blob = await upload(safe, file, {
+            access: "public",
+            handleUploadUrl: "/api/blob-upload",
+            contentType: file.type || undefined,
+          });
+          fileLinks[name] = blob.url;
+        }
+
+        // 2. Send the (small) form fields + file URLs as JSON to the lead API.
+        const payload: Record<string, unknown> = { files: fileLinks };
+        new FormData(ctaForm).forEach((v, k) => {
+          if (typeof v === "string") payload[k] = v;
+        });
+
         const res = await fetch("/api/apply", {
           method: "POST",
-          body: new FormData(ctaForm),
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
         });
         if (res.status === 201) {
           window.location.href = "/thank-you";
@@ -194,8 +220,13 @@
         }
         const data = await res.json().catch(() => ({}));
         showError(data.message || "Възникна грешка. Опитайте отново.");
-      } catch {
-        showError("Неуспешна връзка със сървъра.");
+      } catch (err) {
+        const m = (err instanceof Error && err.message) || "";
+        showError(
+          /size|large|maximum/i.test(m)
+            ? "Файлът е твърде голям (макс. 100 MB)."
+            : "Възникна грешка при изпращането. Опитайте отново."
+        );
       }
       if (submitBtn) {
         submitBtn.disabled = false;
