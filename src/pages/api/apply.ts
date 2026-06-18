@@ -4,7 +4,7 @@ import { put } from "@vercel/blob";
 // This route runs on-demand as a Vercel serverless function (not prerendered).
 export const prerender = false;
 
-const SKYGURU_ENDPOINT = "https://test-hb.skyguru.ai/api/v1/public/leads";
+const SKYGURU_ENDPOINT = "https://skyguru.ai/api/v1/public/leads";
 const FORM_NAME = "Casting Ralica";
 const MAX_FILE = 100 * 1024 * 1024; // 100 MB
 
