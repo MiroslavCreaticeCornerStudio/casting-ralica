@@ -106,7 +106,13 @@ export const POST: APIRoute = async ({ request }) => {
       body: JSON.stringify(payload),
     });
 
-    if (res.status === 201) return json({ success: true }, 201);
+    if (res.status === 201) {
+      // TEMP: echo the CRM payload for a gated final test only. Remove me.
+      if (request.headers.get("x-debug-echo") === "ralica-final-2026") {
+        return json({ success: true, _debug: payload }, 201);
+      }
+      return json({ success: true }, 201);
+    }
 
     if (res.status === 422) {
       const data: any = await res.json().catch(() => ({}));
