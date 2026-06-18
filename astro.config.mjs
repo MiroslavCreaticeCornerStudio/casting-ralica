@@ -2,6 +2,8 @@
 import { defineConfig } from 'astro/config';
 import vercel from '@astrojs/vercel';
 
+import cloudflare from '@astrojs/cloudflare';
+
 // https://astro.build/config
 export default defineConfig({
   // TODO: update to the real production domain before launch
@@ -11,5 +13,5 @@ export default defineConfig({
   // Pages stay static (prerendered); only the lead API runs on-demand as a
   // Vercel serverless function (it opts in with `export const prerender = false`).
   // Uploaded files go to Vercel Blob, so no extra bindings/config are required.
-  adapter: vercel(),
+  adapter: cloudflare(),
 });

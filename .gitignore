@@ -61,3 +61,7 @@ next-env.d.ts
 
 # Starter setup — backup folder created if scaffolder needs to move conflicting files
 _starter-backup/
+
+.dev.vars*
+!.dev.vars.example
+!.env.example
