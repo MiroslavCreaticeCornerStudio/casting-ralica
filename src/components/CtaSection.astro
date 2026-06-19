@@ -186,22 +186,40 @@
         submitBtn.textContent = "Изпращане…";
       }
       try {
-        // 1. Upload each file straight to Vercel Blob from the browser. This
-        //    bypasses the serverless request-body limit (~4.5MB), so large
-        //    casting videos upload fine — we only get small URLs back.
-        const fileLinks: Record<string, string> = {};
+        // 1. Upload all files straight to Vercel Blob from the browser, in
+        //    parallel, with a live progress %. This bypasses the serverless
+        //    request-body limit (~4.5MB) so large casting videos upload fine;
+        //    the wait is the video transfer itself, so we surface progress.
+        const toUpload: { name: string; file: File }[] = [];
         for (const name of ["cv", "cover-letter", "video"]) {
           const input = ctaForm.querySelector<HTMLInputElement>(`input[name="${name}"]`);
           const file = input?.files?.[0];
-          if (!file) continue;
-          const safe = (file.name || "file").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100);
-          const blob = await upload(safe, file, {
-            access: "public",
-            handleUploadUrl: "/api/blob-upload",
-            contentType: file.type || undefined,
-          });
-          fileLinks[name] = blob.url;
+          if (file) toUpload.push({ name, file });
         }
+        const grandTotal = toUpload.reduce((s, f) => s + (f.file.size || 0), 0) || 1;
+        const loadedBy: Record<string, number> = {};
+        const renderProgress = () => {
+          const done = Object.values(loadedBy).reduce((s, n) => s + n, 0);
+          const pct = Math.min(99, Math.round((done / grandTotal) * 100));
+          if (submitBtn) submitBtn.textContent = `Качване… ${pct}%`;
+        };
+        const fileLinks: Record<string, string> = {};
+        await Promise.all(
+          toUpload.map(async ({ name, file }) => {
+            const safe = (file.name || "file").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100);
+            const blob = await upload(safe, file, {
+              access: "public",
+              handleUploadUrl: "/api/blob-upload",
+              contentType: file.type || undefined,
+              onUploadProgress: (e) => {
+                loadedBy[name] = e.loaded;
+                renderProgress();
+              },
+            });
+            fileLinks[name] = blob.url;
+          })
+        );
+        if (submitBtn) submitBtn.textContent = "Изпращане…";
 
         // 2. Send the (small) form fields + file URLs as JSON to the lead API.
         const payload: Record<string, unknown> = { files: fileLinks };
