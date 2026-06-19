@@ -53,6 +53,7 @@
                 <span class="cta__attach-label">Прикачи файл</span>
                 <input type="file" name="cv" accept=".pdf,.doc,.docx" required />
               </label>
+              <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
             </div>
             <div class="cta__attach">
               <span class="cta__label">Мотивационно писмо*</span>
@@ -60,6 +61,7 @@
                 <span class="cta__attach-label">Прикачи файл</span>
                 <input type="file" name="cover-letter" accept=".pdf,.doc,.docx" required />
               </label>
+              <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
             </div>
             <div class="cta__attach">
               <span class="cta__label">Видео*</span>
@@ -67,6 +69,7 @@
                 <span class="cta__attach-label">Прикачи видео</span>
                 <input type="file" name="video" accept="video/*" required />
               </label>
+              <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
             </div>
           </div>
         </div>
@@ -161,18 +164,87 @@
       status.hidden = false;
     };
 
-    // File-upload feedback — show the chosen file name + a check on the pill.
-    ctaForm?.querySelectorAll<HTMLLabelElement>(".cta__attach-btn").forEach((btn) => {
-      const input = btn.querySelector<HTMLInputElement>('input[type="file"]');
-      const label = btn.querySelector<HTMLElement>(".cta__attach-label");
-      if (!input || !label) return;
+    // ── File uploads ──────────────────────────────────────────────────────
+    // Upload each file to Vercel Blob the moment it's selected, with a progress
+    // bar under its button. By submit time the files are already stored, so we
+    // only send their URLs (small JSON); submit just waits for any file still
+    // uploading. This also bypasses the ~4.5MB serverless request-body limit.
+    const FILE_NAMES = ["cv", "cover-letter", "video"];
+    const uploaded: Record<string, string | undefined> = {};
+    const pending: Record<string, Promise<unknown> | undefined> = {};
+    const epochs: Record<string, number> = {};
+    const sanitizeName = (n: string) =>
+      (n || "file").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100);
+
+    ctaForm?.querySelectorAll<HTMLDivElement>(".cta__attach").forEach((attach) => {
+      const input = attach.querySelector<HTMLInputElement>('input[type="file"]');
+      const btn = attach.querySelector<HTMLLabelElement>(".cta__attach-btn");
+      const label = attach.querySelector<HTMLElement>(".cta__attach-label");
+      const bar = attach.querySelector<HTMLElement>(".cta__attach-progress");
+      const fillEl = attach.querySelector<HTMLElement>(".cta__attach-progress-fill");
+      if (!input || !btn || !label) return;
+      const name = input.name;
       const def = label.textContent || "";
+
+      const setBar = (pct: number, error = false) => {
+        if (bar) {
+          bar.hidden = false;
+          bar.classList.toggle("is-error", error);
+        }
+        if (fillEl) fillEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      };
+      const hideBar = () => {
+        if (bar) {
+          bar.hidden = true;
+          bar.classList.remove("is-error");
+        }
+        if (fillEl) fillEl.style.width = "0%";
+      };
+
       input.addEventListener("change", () => {
-        const name = input.files && input.files[0] ? input.files[0].name : "";
-        label.textContent = name || def;
-        btn.classList.toggle("is-filled", !!name);
-        if (name) btn.title = name;
+        const file = input.files && input.files[0];
+        // Pill state: filename + green check.
+        label.textContent = file ? file.name : def;
+        btn.classList.toggle("is-filled", !!file);
+        if (file) btn.title = file.name;
         else btn.removeAttribute("title");
+
+        if (!file) {
+          uploaded[name] = undefined;
+          pending[name] = undefined;
+          hideBar();
+          return;
+        }
+
+        // Start uploading immediately; show progress under the button.
+        const myEpoch = (epochs[name] = (epochs[name] || 0) + 1);
+        uploaded[name] = undefined;
+        setBar(3);
+        const p = upload(sanitizeName(file.name), file, {
+          access: "public",
+          handleUploadUrl: "/api/blob-upload",
+          contentType: file.type || undefined,
+          onUploadProgress: (ev) => {
+            if (epochs[name] === myEpoch) setBar(ev.percentage);
+          },
+        }).then((blob) => {
+          if (epochs[name] !== myEpoch) return undefined; // a newer file was picked
+          uploaded[name] = blob.url;
+          setBar(100);
+          return blob.url;
+        });
+        pending[name] = p;
+        p.catch((err) => {
+          if (epochs[name] !== myEpoch) return;
+          setBar(100, true);
+          uploaded[name] = undefined;
+          const m = (err instanceof Error && err.message) || "";
+          showError(
+            /size|large|maximum/i.test(m)
+              ? "Файлът е твърде голям (макс. 100 MB)."
+              : "Качването на файл не бе успешно. Опитайте отново."
+          );
+        });
       });
     });
 
@@ -186,42 +258,30 @@
         submitBtn.textContent = "Изпращане…";
       }
       try {
-        // 1. Upload all files straight to Vercel Blob from the browser, in
-        //    parallel, with a live progress %. This bypasses the serverless
-        //    request-body limit (~4.5MB) so large casting videos upload fine;
-        //    the wait is the video transfer itself, so we surface progress.
-        const toUpload: { name: string; file: File }[] = [];
-        for (const name of ["cv", "cover-letter", "video"]) {
-          const input = ctaForm.querySelector<HTMLInputElement>(`input[name="${name}"]`);
-          const file = input?.files?.[0];
-          if (file) toUpload.push({ name, file });
-        }
-        const grandTotal = toUpload.reduce((s, f) => s + (f.file.size || 0), 0) || 1;
-        const loadedBy: Record<string, number> = {};
-        const renderProgress = () => {
-          const done = Object.values(loadedBy).reduce((s, n) => s + n, 0);
-          const pct = Math.min(99, Math.round((done / grandTotal) * 100));
-          if (submitBtn) submitBtn.textContent = `Качване… ${pct}%`;
-        };
-        const fileLinks: Record<string, string> = {};
-        await Promise.all(
-          toUpload.map(async ({ name, file }) => {
-            const safe = (file.name || "file").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100);
-            const blob = await upload(safe, file, {
-              access: "public",
-              handleUploadUrl: "/api/blob-upload",
-              contentType: file.type || undefined,
-              onUploadProgress: (e) => {
-                loadedBy[name] = e.loaded;
-                renderProgress();
-              },
-            });
-            fileLinks[name] = blob.url;
-          })
+        // Files upload on select — wait for any still in flight.
+        await Promise.allSettled(
+          FILE_NAMES.map((n) => pending[n]).filter(Boolean) as Promise<unknown>[]
         );
-        if (submitBtn) submitBtn.textContent = "Изпращане…";
 
-        // 2. Send the (small) form fields + file URLs as JSON to the lead API.
+        // A chosen file whose upload didn't succeed → ask them to reselect.
+        const failed = FILE_NAMES.some((n) => {
+          const inp = ctaForm.querySelector<HTMLInputElement>(`input[name="${n}"]`);
+          return !!(inp && inp.files && inp.files[0]) && !uploaded[n];
+        });
+        if (failed) {
+          showError("Някой файл не се качи успешно. Изберете го отново.");
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = original;
+          }
+          return;
+        }
+
+        const fileLinks: Record<string, string> = {};
+        FILE_NAMES.forEach((n) => {
+          if (uploaded[n]) fileLinks[n] = uploaded[n] as string;
+        });
+
         const payload: Record<string, unknown> = { files: fileLinks };
         new FormData(ctaForm).forEach((v, k) => {
           if (typeof v === "string") payload[k] = v;
@@ -238,13 +298,8 @@
         }
         const data = await res.json().catch(() => ({}));
         showError(data.message || "Възникна грешка. Опитайте отново.");
-      } catch (err) {
-        const m = (err instanceof Error && err.message) || "";
-        showError(
-          /size|large|maximum/i.test(m)
-            ? "Файлът е твърде голям (макс. 100 MB)."
-            : "Възникна грешка при изпращането. Опитайте отново."
-        );
+      } catch {
+        showError("Възникна грешка при изпращането. Опитайте отново.");
       }
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -451,6 +506,30 @@
     content: "✓";
     font-weight: 700;
     line-height: 1;
+  }
+  /* Upload progress bar shown under the button while the file uploads */
+  .cta__attach-progress {
+    width: 14em;
+    max-width: 100%;
+    height: 0.375em; /* 6px */
+    margin-top: 0.5em;
+    border-radius: 1em;
+    background-color: rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+  }
+  .cta__attach-progress[hidden] {
+    display: none;
+  }
+  .cta__attach-progress-fill {
+    display: block;
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background-color: #2f9e44;
+    transition: width 0.2s ease;
+  }
+  .cta__attach-progress.is-error .cta__attach-progress-fill {
+    background-color: var(--color-accent);
   }
 
   .cta__consent {
