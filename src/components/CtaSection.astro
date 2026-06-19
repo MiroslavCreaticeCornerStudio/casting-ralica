@@ -248,12 +248,18 @@
           return blob.url;
         });
         pending[name] = p;
-        p.catch(() => {
+        p.catch((err) => {
           if (epochs[name] !== myEpoch) return;
           hideBar();
           btn.classList.remove("is-filled");
           uploaded[name] = undefined;
-          setStatus("Качването не бе успешно. Опитайте отново.", false);
+          const m = (err instanceof Error && err.message) || "";
+          setStatus(
+            /size|large|maximum/i.test(m)
+              ? "Файлът е твърде голям (макс. 2 GB)."
+              : "Качването не бе успешно. Опитайте отново.",
+            false
+          );
         });
       });
     });

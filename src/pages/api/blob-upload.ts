@@ -6,6 +6,8 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 // Vercel function; reads BLOB_READ_WRITE_TOKEN from the environment.
 export const prerender = false;
 
+const MAX_FILE = 2 * 1024 * 1024 * 1024; // 2 GB
+
 const ALLOWED_CONTENT_TYPES = [
   "application/pdf",
   "application/msword",
@@ -32,8 +34,8 @@ export const POST: APIRoute = async ({ request }) => {
       body,
       request,
       onBeforeGenerateToken: async () => ({
-        // No size cap — Vercel Blob client uploads support up to 5 TB.
         allowedContentTypes: ALLOWED_CONTENT_TYPES,
+        maximumSizeInBytes: MAX_FILE,
         addRandomSuffix: true,
       }),
       // We read the returned URL on the client, so no completion work is needed.
