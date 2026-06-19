@@ -5,7 +5,7 @@
   <div class="cta__bg" aria-hidden="true"></div>
 
   <div class="cta__inner container container--padded">
-    <form class="cta__card" method="post" action="/api/apply" enctype="multipart/form-data" data-reveal>
+    <form class="cta__card" method="post" action="/api/apply" enctype="multipart/form-data" novalidate data-reveal>
       {/* Hidden attribution fields — auto-filled from URL params / Meta cookies for offline conversion tracking */}
       <input type="hidden" name="fbclid" />
       <input type="hidden" name="fbc" />
@@ -54,6 +54,7 @@
                 <input type="file" name="cv" accept=".pdf,.doc,.docx" required />
               </label>
               <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
+              <p class="cta__attach-status" hidden></p>
             </div>
             <div class="cta__attach">
               <span class="cta__label">Мотивационно писмо*</span>
@@ -62,6 +63,7 @@
                 <input type="file" name="cover-letter" accept=".pdf,.doc,.docx" required />
               </label>
               <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
+              <p class="cta__attach-status" hidden></p>
             </div>
             <div class="cta__attach">
               <span class="cta__label">Видео*</span>
@@ -70,6 +72,7 @@
                 <input type="file" name="video" accept="video/*" required />
               </label>
               <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
+              <p class="cta__attach-status" hidden></p>
             </div>
           </div>
         </div>
@@ -182,32 +185,41 @@
       const label = attach.querySelector<HTMLElement>(".cta__attach-label");
       const bar = attach.querySelector<HTMLElement>(".cta__attach-progress");
       const fillEl = attach.querySelector<HTMLElement>(".cta__attach-progress-fill");
+      const statusEl = attach.querySelector<HTMLElement>(".cta__attach-status");
       if (!input || !btn || !label) return;
       const name = input.name;
       const def = label.textContent || "";
 
-      const setBar = (pct: number, error = false) => {
-        if (bar) {
-          bar.hidden = false;
-          bar.classList.toggle("is-error", error);
-        }
+      const setBar = (pct: number) => {
+        if (bar) bar.hidden = false;
         if (fillEl) fillEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
       };
       const hideBar = () => {
-        if (bar) {
-          bar.hidden = true;
-          bar.classList.remove("is-error");
-        }
+        if (bar) bar.hidden = true;
         if (fillEl) fillEl.style.width = "0%";
+      };
+      const setStatus = (text: string, ok: boolean) => {
+        if (!statusEl) return;
+        statusEl.textContent = text;
+        statusEl.classList.toggle("is-ok", ok);
+        statusEl.classList.toggle("is-err", !ok);
+        statusEl.hidden = false;
+      };
+      const clearStatus = () => {
+        if (!statusEl) return;
+        statusEl.hidden = true;
+        statusEl.textContent = "";
+        statusEl.classList.remove("is-ok", "is-err");
       };
 
       input.addEventListener("change", () => {
         const file = input.files && input.files[0];
-        // Pill state: filename + green check.
         label.textContent = file ? file.name : def;
-        btn.classList.toggle("is-filled", !!file);
         if (file) btn.title = file.name;
         else btn.removeAttribute("title");
+        // The pill turns green only after a successful upload (below).
+        btn.classList.remove("is-filled");
+        clearStatus();
 
         if (!file) {
           uploaded[name] = undefined;
@@ -230,27 +242,62 @@
         }).then((blob) => {
           if (epochs[name] !== myEpoch) return undefined; // a newer file was picked
           uploaded[name] = blob.url;
-          setBar(100);
+          hideBar();
+          btn.classList.add("is-filled"); // green only now, when fully uploaded
+          setStatus("✓ Файлът беше качен.", true);
           return blob.url;
         });
         pending[name] = p;
         p.catch((err) => {
           if (epochs[name] !== myEpoch) return;
-          setBar(100, true);
+          hideBar();
+          btn.classList.remove("is-filled");
           uploaded[name] = undefined;
           const m = (err instanceof Error && err.message) || "";
-          showError(
+          setStatus(
             /size|large|maximum/i.test(m)
               ? "Файлът е твърде голям (макс. 100 MB)."
-              : "Качването на файл не бе успешно. Опитайте отново."
+              : "Качването не бе успешно. Опитайте отново.",
+            false
           );
         });
       });
     });
 
+    // Client-side validation with Bulgarian messages (form is `novalidate`).
+    const validate = (): string | null => {
+      const val = (k: string) =>
+        (ctaForm?.querySelector<HTMLInputElement>(`[name="${k}"]`)?.value || "").trim();
+      if (!val("name")) return "Моля, въведете вашето име.";
+      if (val("phone").replace(/\D/g, "").length < 9)
+        return "Моля, въведете валиден телефонен номер.";
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val("email")))
+        return "Моля, въведете валиден имейл адрес.";
+      const labels: Record<string, string> = {
+        cv: "CV",
+        "cover-letter": "мотивационно писмо",
+        video: "видео",
+      };
+      for (const n of FILE_NAMES) {
+        const inp = ctaForm?.querySelector<HTMLInputElement>(`input[name="${n}"]`);
+        if (!(inp && inp.files && inp.files[0])) return `Моля, прикачете ${labels[n]}.`;
+      }
+      const consent = ctaForm?.querySelector<HTMLInputElement>('input[name="consent"]');
+      if (!consent || !consent.checked)
+        return "Необходимо е съгласие за обработка на личните данни.";
+      return null;
+    };
+
     ctaForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (status) status.hidden = true;
+
+      const problem = validate();
+      if (problem) {
+        showError(problem);
+        return;
+      }
+
       fill();
       const original = submitBtn?.textContent || "";
       if (submitBtn) {
@@ -530,6 +577,22 @@
   }
   .cta__attach-progress.is-error .cta__attach-progress-fill {
     background-color: var(--color-accent);
+  }
+  /* Per-file status line ("Файлът беше качен." / error) */
+  .cta__attach-status {
+    margin-top: 0.4em;
+    font-family: var(--font-body);
+    font-size: 0.8125em; /* 13px */
+    line-height: 1.3;
+  }
+  .cta__attach-status[hidden] {
+    display: none;
+  }
+  .cta__attach-status.is-ok {
+    color: #2f9e44;
+  }
+  .cta__attach-status.is-err {
+    color: var(--color-accent);
   }
 
   .cta__consent {
