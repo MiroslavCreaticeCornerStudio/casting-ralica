@@ -65,6 +65,9 @@
               <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
               <p class="cta__attach-status" hidden></p>
             </div>
+            {/* Видео upload — HIDDEN for now (client may re-enable later).
+                To restore: uncomment this block AND add "video" back to
+                FILE_NAMES in the <script> below.
             <div class="cta__attach">
               <span class="cta__label">Видео*</span>
               <label class="cta__attach-btn">
@@ -74,6 +77,7 @@
               <div class="cta__attach-progress" hidden><span class="cta__attach-progress-fill"></span></div>
               <p class="cta__attach-status" hidden></p>
             </div>
+            */}
           </div>
         </div>
 
@@ -172,7 +176,7 @@
     // bar under its button. By submit time the files are already stored, so we
     // only send their URLs (small JSON); submit just waits for any file still
     // uploading. This also bypasses the ~4.5MB serverless request-body limit.
-    const FILE_NAMES = ["cv", "cover-letter", "video"];
+    const FILE_NAMES = ["cv", "cover-letter"]; // "video" hidden for now — re-add to re-enable
     const uploaded: Record<string, string | undefined> = {};
     const pending: Record<string, Promise<unknown> | undefined> = {};
     const epochs: Record<string, number> = {};
