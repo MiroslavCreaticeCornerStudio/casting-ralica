@@ -24,7 +24,7 @@ All assets downloaded from Figma (`zC2fj9ygaCKgnemwpd4Bln`) to `public/assets/im
 |------|------|------|-------------|
 | tabs-divider.svg | SVG | 263B | Vertical divider between columns |
 | tabs-icon-briefcase.svg | SVG | 2.3KB | Briefcase icon ("1 свободно място") |
-| tabs-icon-user.svg | SVG | 1.6KB | User-circle icon ("Не е нужен опит") |
+| tabs-icon-user.svg | SVG | 1.6KB | User-circle icon ("Отворено за настоящи и бъдещи брокери") |
 
 ## Info / Challenge (`2454:8702`)
 | File | Type | Size | Description |

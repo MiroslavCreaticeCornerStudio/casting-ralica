@@ -61,3 +61,6 @@ next-env.d.ts
 
 # Starter setup — backup folder created if scaffolder needs to move conflicting files
 _starter-backup/
+
+# ShipStudio metadata
+.shipstudio/
